@@ -41,10 +41,19 @@ export async function handleApi(request, env, nowIso) {
     const chatId = resolveChatId(env, body.chat_id)
     if (!chatId) return json({ ok: false, error: 'чат не разрешён' }, 403)
 
+    let dueAt = null
+    if (body.due_at) {
+      const d = new Date(body.due_at)
+      if (Number.isNaN(d.getTime())) return json({ ok: false, error: 'неверный due_at' }, 400)
+      dueAt = d.toISOString()
+    }
+
     const { task, parsed } = await tasks.addTaskFromText(env, {
       chatId, text, authorRole: 'danya', authorId: 0, nowIso,
       notify: body.notify !== false,
       assignee: body.assignee ?? null,
+      dueAt,
+      repeatRule: body.repeat_rule ?? null,
     })
     if (!task) return json({ ok: false, error: 'не понял текст' }, 400)
     return json({ ok: true, task, source: parsed.source })

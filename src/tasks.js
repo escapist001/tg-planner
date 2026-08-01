@@ -9,6 +9,7 @@ import { addMinutes } from './time.js'
 // Общая логика создания дела: ей пользуется и бот в чате, и внешнее API.
 export async function addTaskFromText(env, {
   chatId, text, authorRole, authorId, nowIso, notify = true, assignee: forced = null,
+  dueAt: explicitDue = null, repeatRule: explicitRepeat = null,
 }) {
   const chat = await db.getChat(env.DB, chatId, {
     tz: env.DEFAULT_TZ,
@@ -18,7 +19,12 @@ export async function addTaskFromText(env, {
 
   const detected = detectAssignee(text, authorRole)
   const assignee = forced ?? detected.assignee
-  const parsed = await parseTask(env, detected.text, nowIso, chat.tz)
+
+  // Явные срок и повтор нужны для массовой загрузки готового плана: там дата уже известна
+  // точно, и полагаться на разбор текста незачем.
+  const parsed = explicitDue
+    ? { title: detected.text.trim().slice(0, 200), dueAt: explicitDue, repeatRule: explicitRepeat, source: 'explicit' }
+    : await parseTask(env, detected.text, nowIso, chat.tz)
   if (!parsed.title) return { task: null, chat, parsed }
 
   const task = await db.createTask(env.DB, {

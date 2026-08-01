@@ -63,6 +63,28 @@ describe('handleApi', () => {
     expect(arg.notify).toBe(false)
   })
 
+  it('принимает явные due_at и repeat_rule без разбора текста', async () => {
+    await handleApi(req('/api/tasks', {
+      method: 'POST',
+      body: {
+        text: 'Позвонить в загс насчёт фамилии',
+        due_at: '2026-08-03T08:00:00.000Z',
+        repeat_rule: 'weekly:1',
+        notify: false,
+      },
+    }), env, NOW)
+    const arg = tasks.addTaskFromText.mock.calls[0][1]
+    expect(arg.dueAt).toBe('2026-08-03T08:00:00.000Z')
+    expect(arg.repeatRule).toBe('weekly:1')
+  })
+
+  it('битый due_at отвергается', async () => {
+    const res = await handleApi(req('/api/tasks', {
+      method: 'POST', body: { text: 'тест', due_at: 'вчера как-нибудь' },
+    }), env, NOW)
+    expect(res.status).toBe(400)
+  })
+
   it('список на неделю', async () => {
     const between = vi.spyOn(db, 'tasksBetween').mockResolvedValue([{ id: 1, title: 'Дело' }])
     vi.spyOn(db, 'getChat').mockResolvedValue({ chat_id: -1001, tz: 'Europe/Moscow' })
