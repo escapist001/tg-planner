@@ -12,7 +12,7 @@ AI_ENABLED = "true"
 [[d1_databases]]
 binding = "DB"
 database_name = "tg-planner"
-database_id = "5a763fd4-398c-448a-b2b7-370f53aaad0d"
+database_id = "PLACEHOLDER_FILL_ON_DEPLOY"
 
 [ai]
 binding = "AI"
