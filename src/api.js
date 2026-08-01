@@ -66,8 +66,13 @@ export async function handleApi(request, env, nowIso) {
     const id = Number(parts[2])
     const task = await db.getTask(env.DB, id)
     if (!task) return json({ ok: false, error: 'дело не найдено' }, 404)
-    await db.markDone(env.DB, id)
-    return json({ ok: true })
+
+    const chat = await db.getChat(env.DB, task.chat_id, {
+      tz: env.DEFAULT_TZ, digestTime: env.DEFAULT_DIGEST_TIME,
+      remindBeforeMin: Number(env.DEFAULT_REMIND_BEFORE_MIN),
+    })
+    const next = await tasks.completeTask(env, task, chat, nowIso)
+    return json({ ok: true, next })
   }
 
   return json({ ok: false, error: 'not found' }, 404)

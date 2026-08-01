@@ -31,7 +31,7 @@ export default {
       }
     }
 
-    if (request.method === 'GET') return new Response('tg-planner жив')
+    if (request.method === 'GET' && url.pathname === '/') return new Response('tg-planner жив')
 
     if (url.pathname !== '/tg') return new Response('not found', { status: 404 })
 

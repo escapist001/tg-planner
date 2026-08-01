@@ -3,6 +3,7 @@ import * as tg from './telegram.js'
 import { parseTask } from './parse/index.js'
 import { detectAssignee } from './assignee.js'
 import { taskCard } from './format.js'
+import { nextOccurrence } from './repeat.js'
 import { addMinutes } from './time.js'
 
 // Общая логика создания дела: ей пользуется и бот в чате, и внешнее API.
@@ -39,4 +40,27 @@ export async function addTaskFromText(env, {
   }
 
   return { task: full, chat, parsed }
+}
+
+// Закрыть дело. У повторяющегося сразу заводим следующий экземпляр,
+// иначе оно исчезнет насовсем. Возвращает срок следующего раза или null.
+export async function completeTask(env, task, chat, nowIso) {
+  await db.markDone(env.DB, task.id)
+  if (!task.repeat_rule) return null
+
+  const next = nextOccurrence(task.due_at, task.repeat_rule, chat.tz)
+  if (!next) return null
+
+  await db.createTask(env.DB, {
+    chat_id: task.chat_id,
+    title: task.title,
+    due_at: next,
+    remind_at: addMinutes(next, -chat.remind_before_min),
+    assignee: task.assignee,
+    created_by: task.created_by,
+    repeat_rule: task.repeat_rule,
+    parent_id: task.parent_id ?? task.id,
+    created_at: nowIso,
+  })
+  return next
 }

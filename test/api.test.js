@@ -75,10 +75,26 @@ describe('handleApi', () => {
 
   it('отметка выполнения', async () => {
     vi.spyOn(db, 'getTask').mockResolvedValue({ id: 7, chat_id: -1001, title: 'Дело', repeat_rule: null })
+    vi.spyOn(db, 'getChat').mockResolvedValue({ chat_id: -1001, tz: 'Europe/Moscow', remind_before_min: 30 })
     const done = vi.spyOn(db, 'markDone').mockResolvedValue()
     const res = await handleApi(req('/api/tasks/7/done', { method: 'POST' }), env, NOW)
     expect(res.status).toBe(200)
     expect(done).toHaveBeenCalledWith(env.DB, 7)
+  })
+
+  it('отметка повторяющегося дела заводит следующее — как и кнопка в чате', async () => {
+    vi.spyOn(db, 'getTask').mockResolvedValue({
+      id: 7, chat_id: -1001, title: 'Мусор', due_at: '2026-08-11T06:00:00Z',
+      assignee: 'both', created_by: 0, repeat_rule: 'weekly:2', parent_id: null,
+    })
+    vi.spyOn(db, 'getChat').mockResolvedValue({ chat_id: -1001, tz: 'Europe/Moscow', remind_before_min: 30 })
+    vi.spyOn(db, 'markDone').mockResolvedValue()
+    const create = vi.spyOn(db, 'createTask').mockResolvedValue({ id: 8 })
+    const res = await handleApi(req('/api/tasks/7/done', { method: 'POST' }), env, NOW)
+    const data = await res.json()
+    expect(data.next).toBe('2026-08-18T06:00:00.000Z')
+    expect(create.mock.calls[0][1].due_at).toBe('2026-08-18T06:00:00.000Z')
+    expect(create.mock.calls[0][1].parent_id).toBe(7)
   })
 
   it('неизвестный путь — 404', async () => {

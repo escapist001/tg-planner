@@ -1,7 +1,6 @@
 import * as db from './db.js'
 import * as tg from './telegram.js'
-import { addTaskFromText } from './tasks.js'
-import { nextOccurrence } from './repeat.js'
+import { addTaskFromText, completeTask } from './tasks.js'
 import {
   taskCard, dayList, weekList, snoozeKeyboard, taskKeyboard, ASSIGNEE_LABEL, plural,
 } from './format.js'
@@ -209,21 +208,10 @@ async function handleCallback(cb, env, nowIso) {
   }
 
   if (action === 'done') {
-    await db.markDone(env.DB, taskId)
-    let suffix = '\n\n✅ Готово.'
-    if (task.repeat_rule) {
-      const next = nextOccurrence(task.due_at, task.repeat_rule, chat.tz)
-      if (next) {
-        await db.createTask(env.DB, {
-          chat_id: chatId, title: task.title, due_at: next,
-          remind_at: addMinutes(next, -chat.remind_before_min),
-          assignee: task.assignee, created_by: task.created_by,
-          repeat_rule: task.repeat_rule, parent_id: task.parent_id ?? task.id,
-          created_at: nowIso,
-        })
-        suffix = `\n\n✅ Готово. Следующий раз — ${formatDateHuman(next, chat.tz, nowIso)}.`
-      }
-    }
+    const next = await completeTask(env, task, chat, nowIso)
+    const suffix = next
+      ? `\n\n✅ Готово. Следующий раз — ${formatDateHuman(next, chat.tz, nowIso)}.`
+      : '\n\n✅ Готово.'
     await tg.editMessageText(env, chatId, cb.message.message_id,
       `<s>${task.title}</s>${suffix}`, { reply_markup: { inline_keyboard: [] } })
     await tg.answerCallback(env, cb.id, 'Отметил')
