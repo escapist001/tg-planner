@@ -1,0 +1,74 @@
+import * as db from './db.js'
+import * as tasks from './tasks.js'
+import { startOfLocalDay, addDays } from './time.js'
+
+const json = (data, status = 200) => new Response(JSON.stringify(data), {
+  status, headers: { 'content-type': 'application/json; charset=utf-8' },
+})
+
+function authorized(request, env) {
+  const header = request.headers.get('authorization') ?? ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  return Boolean(env.API_TOKEN) && token === env.API_TOKEN
+}
+
+function defaultChatId(env, explicit) {
+  if (explicit) return Number(explicit)
+  const first = (env.ALLOWED_CHATS ?? '').split(',')[0]?.trim()
+  return first ? Number(first) : null
+}
+
+export async function handleApi(request, env, nowIso) {
+  if (!authorized(request, env)) return json({ ok: false, error: 'unauthorized' }, 401)
+
+  const url = new URL(request.url)
+  const parts = url.pathname.split('/').filter(Boolean) // ['api', 'tasks', ...]
+
+  if (parts[1] !== 'tasks') return json({ ok: false, error: 'not found' }, 404)
+
+  if (parts.length === 2 && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}))
+    const text = String(body.text ?? '').trim()
+    if (!text) return json({ ok: false, error: 'пустой текст' }, 400)
+
+    const chatId = defaultChatId(env, body.chat_id)
+    if (!chatId) return json({ ok: false, error: 'не задан chat_id' }, 400)
+
+    const { task, parsed } = await tasks.addTaskFromText(env, {
+      chatId, text, authorRole: 'danya', authorId: 0, nowIso,
+      notify: body.notify !== false,
+      assignee: body.assignee ?? null,
+    })
+    if (!task) return json({ ok: false, error: 'не понял текст' }, 400)
+    return json({ ok: true, task, source: parsed.source })
+  }
+
+  if (parts.length === 2 && request.method === 'GET') {
+    const chatId = defaultChatId(env, url.searchParams.get('chat_id'))
+    if (!chatId) return json({ ok: false, error: 'не задан chat_id' }, 400)
+
+    const chat = await db.getChat(env.DB, chatId, {
+      tz: env.DEFAULT_TZ, digestTime: env.DEFAULT_DIGEST_TIME,
+      remindBeforeMin: Number(env.DEFAULT_REMIND_BEFORE_MIN),
+    })
+    const range = url.searchParams.get('range') ?? 'week'
+
+    if (range === 'undated') return json({ ok: true, tasks: await db.undatedTasks(env.DB, chatId) })
+
+    const shift = range === 'tomorrow' ? 1 : 0
+    const span = range === 'week' ? 7 : 1
+    const from = addDays(startOfLocalDay(nowIso, chat.tz), shift)
+    const to = addDays(from, span)
+    return json({ ok: true, tasks: await db.tasksBetween(env.DB, chatId, from, to) })
+  }
+
+  if (parts.length === 4 && parts[3] === 'done' && request.method === 'POST') {
+    const id = Number(parts[2])
+    const task = await db.getTask(env.DB, id)
+    if (!task) return json({ ok: false, error: 'дело не найдено' }, 404)
+    await db.markDone(env.DB, id)
+    return json({ ok: true })
+  }
+
+  return json({ ok: false, error: 'not found' }, 404)
+}
