@@ -169,8 +169,10 @@ function extractDate(text) {
   return { kind: null, rest }
 }
 
+const MAX_TITLE = 200
+
 function cleanTitle(text) {
-  const t = text.replace(/\s+/g, ' ').replace(/^[\s,.:;-]+|[\s,.:;-]+$/g, '')
+  const t = text.replace(/\s+/g, ' ').replace(/^[\s,.:;-]+|[\s,.:;-]+$/g, '').slice(0, MAX_TITLE)
   return t ? t[0].toUpperCase() + t.slice(1) : ''
 }
 

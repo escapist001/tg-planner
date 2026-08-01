@@ -118,6 +118,12 @@ export async function markDigestSent(db, chatId, dateKey) {
     .bind(dateKey, chatId).run()
 }
 
+// Записи о виденных апдейтах нужны примерно на час (столько Telegram ретраит).
+// Без уборки таблица растёт вечно.
+export async function pruneSeenUpdates(db, beforeIso) {
+  await db.prepare('DELETE FROM seen_updates WHERE seen_at < ?').bind(beforeIso).run()
+}
+
 export async function isDuplicateUpdate(db, updateId, nowIso) {
   const row = await db.prepare('SELECT update_id FROM seen_updates WHERE update_id = ?')
     .bind(updateId).first()

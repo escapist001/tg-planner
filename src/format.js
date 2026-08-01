@@ -23,7 +23,9 @@ export function repeatLabel(rule) {
   return null
 }
 
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+// Любой пользовательский текст обязан пройти через это перед вставкой в HTML-разметку Telegram:
+// иначе название вида «купить 3<5 литров» ломает разбор сущностей и сообщение не уходит вообще.
+export const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 const capitalize = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 

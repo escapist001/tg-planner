@@ -5,3 +5,4 @@ node_modules/
 *.log
 .dev.vars
 temp_dev.log
+temp_*

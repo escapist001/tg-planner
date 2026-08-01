@@ -1,7 +1,7 @@
 import * as db from './db.js'
 import * as tg from './telegram.js'
 import { reminderText, digest, taskKeyboard } from './format.js'
-import { localParts, localDateKey, startOfLocalDay, addDays } from './time.js'
+import { localParts, localDateKey, startOfLocalDay, addDays, addMinutes } from './time.js'
 
 // Если тик пропустил час дайджеста (сбой платформы), догоняем в пределах полутора часов.
 // Шире делать нельзя: дайджест, пришедший к обеду, уже бесполезен.
@@ -44,6 +44,15 @@ export async function runTick(env, nowIso) {
       if (await maybeDigest(env, chat, nowIso)) stats.digests++
     } catch (e) {
       console.error('дайджест не ушёл', chat.chat_id, e.message)
+    }
+  }
+
+  // Раз в сутки убираем старые записи о виденных апдейтах.
+  if (nowIso.slice(11, 16) === '04:00') {
+    try {
+      await db.pruneSeenUpdates(env.DB, addMinutes(nowIso, -60 * 24))
+    } catch (e) {
+      console.error('уборка seen_updates не прошла', e.message)
     }
   }
 

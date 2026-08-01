@@ -12,10 +12,17 @@ function authorized(request, env) {
   return Boolean(env.API_TOKEN) && token === env.API_TOKEN
 }
 
-function defaultChatId(env, explicit) {
-  if (explicit) return Number(explicit)
-  const first = (env.ALLOWED_CHATS ?? '').split(',')[0]?.trim()
-  return first ? Number(first) : null
+function allowedChats(env) {
+  return (env.ALLOWED_CHATS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+// Даже с валидным токеном API работает только по разрешённым чатам:
+// утечка токена не должна превращать бота в рассыльщик по всем чатам, где он состоит.
+function resolveChatId(env, explicit) {
+  const list = allowedChats(env)
+  if (!list.length) return null
+  if (explicit == null || explicit === '') return Number(list[0])
+  return list.includes(String(explicit)) ? Number(explicit) : null
 }
 
 export async function handleApi(request, env, nowIso) {
@@ -31,8 +38,8 @@ export async function handleApi(request, env, nowIso) {
     const text = String(body.text ?? '').trim()
     if (!text) return json({ ok: false, error: 'пустой текст' }, 400)
 
-    const chatId = defaultChatId(env, body.chat_id)
-    if (!chatId) return json({ ok: false, error: 'не задан chat_id' }, 400)
+    const chatId = resolveChatId(env, body.chat_id)
+    if (!chatId) return json({ ok: false, error: 'чат не разрешён' }, 403)
 
     const { task, parsed } = await tasks.addTaskFromText(env, {
       chatId, text, authorRole: 'danya', authorId: 0, nowIso,
@@ -44,8 +51,8 @@ export async function handleApi(request, env, nowIso) {
   }
 
   if (parts.length === 2 && request.method === 'GET') {
-    const chatId = defaultChatId(env, url.searchParams.get('chat_id'))
-    if (!chatId) return json({ ok: false, error: 'не задан chat_id' }, 400)
+    const chatId = resolveChatId(env, url.searchParams.get("chat_id"))
+    if (!chatId) return json({ ok: false, error: 'чат не разрешён' }, 403)
 
     const chat = await db.getChat(env.DB, chatId, {
       tz: env.DEFAULT_TZ, digestTime: env.DEFAULT_DIGEST_TIME,
@@ -66,6 +73,9 @@ export async function handleApi(request, env, nowIso) {
     const id = Number(parts[2])
     const task = await db.getTask(env.DB, id)
     if (!task) return json({ ok: false, error: 'дело не найдено' }, 404)
+    if (!allowedChats(env).includes(String(task.chat_id))) {
+      return json({ ok: false, error: 'чат не разрешён' }, 403)
+    }
 
     const chat = await db.getChat(env.DB, task.chat_id, {
       tz: env.DEFAULT_TZ, digestTime: env.DEFAULT_DIGEST_TIME,

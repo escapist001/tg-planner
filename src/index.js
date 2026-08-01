@@ -1,6 +1,7 @@
 import * as router from './router.js'
 import * as reminders from './reminders.js'
 import * as api from './api.js'
+import * as telegram from './telegram.js'
 
 function chatIdOf(update) {
   return update?.message?.chat?.id
@@ -9,9 +10,13 @@ function chatIdOf(update) {
     ?? null
 }
 
+export function allowedChats(env) {
+  return (env.ALLOWED_CHATS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+}
+
 function allowed(env, chatId) {
-  const list = (env.ALLOWED_CHATS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-  if (!list.length) return true
+  const list = allowedChats(env)
+  if (!list.length) return false // пустой список = никого не пускаем, см. режим настройки ниже
   return list.includes(String(chatId))
 }
 
@@ -47,7 +52,20 @@ export default {
     }
 
     const chatId = chatIdOf(update)
-    if (chatId == null || !allowed(env, chatId)) {
+    if (chatId == null) return new Response('ok')
+
+    if (!allowed(env, chatId)) {
+      // Режим первичной настройки: список пуст, значит бота только что поставили.
+      // Называем chat_id, чтобы владелец вписал его в ALLOWED_CHATS, и ничего не делаем.
+      if (!allowedChats(env).length && update.message) {
+        try {
+          await telegram.sendMessage(env, chatId,
+            'Я ещё не настроен.\n\nЭтот чат: <code>' + chatId + '</code>\n\n'
+            + 'Добавь этот номер в секрет <code>ALLOWED_CHATS</code> и передеплой — после этого начну работать.')
+        } catch (e) {
+          console.error('не смог ответить в режиме настройки', e.message)
+        }
+      }
       console.log('апдейт из неразрешённого чата', chatId)
       return new Response('ok')
     }

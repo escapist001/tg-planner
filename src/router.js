@@ -2,7 +2,7 @@ import * as db from './db.js'
 import * as tg from './telegram.js'
 import { addTaskFromText, completeTask } from './tasks.js'
 import {
-  taskCard, dayList, weekList, snoozeKeyboard, taskKeyboard, ASSIGNEE_LABEL, plural,
+  taskCard, dayList, weekList, snoozeKeyboard, taskKeyboard, ASSIGNEE_LABEL, plural, esc,
 } from './format.js'
 import {
   addDays, addMinutes, startOfLocalDay, localParts, localToUtcIso, formatDateHuman, formatTime,
@@ -17,12 +17,12 @@ const HELP = `Я веду ваши дела.
 «каждый вторник», «каждое 5-е число», «по будням».
 
 <b>Команды</b>
-/день — что сегодня
-/завтра — что завтра
-/неделя — расписание на 7 дней
-/мои — только мои дела
-/все — дела без срока
-/настройки — время дайджеста и напоминаний
+/today — что сегодня
+/tomorrow — что завтра
+/week — расписание на 7 дней
+/mine — только мои дела
+/all — дела без срока
+/settings — время дайджеста и напоминаний
 
 Напомню за 30 минут до срока и в сам момент.`
 
@@ -105,7 +105,7 @@ async function createFromText(text, msg, chat, role, env, nowIso) {
   }
 
   if (!task.due_at) {
-    await tg.sendMessage(env, chat.chat_id, `📌 <b>${task.title}</b>\n\nКогда напомнить?`, {
+    await tg.sendMessage(env, chat.chat_id, `📌 <b>${esc(task.title)}</b>\n\nКогда напомнить?`, {
       reply_markup: {
         inline_keyboard: [[
           { text: 'Сегодня', callback_data: `when:${task.id}:today` },
@@ -213,7 +213,7 @@ async function handleCallback(cb, env, nowIso) {
       ? `\n\n✅ Готово. Следующий раз — ${formatDateHuman(next, chat.tz, nowIso)}.`
       : '\n\n✅ Готово.'
     await tg.editMessageText(env, chatId, cb.message.message_id,
-      `<s>${task.title}</s>${suffix}`, { reply_markup: { inline_keyboard: [] } })
+      `<s>${esc(task.title)}</s>${suffix}`, { reply_markup: { inline_keyboard: [] } })
     await tg.answerCallback(env, cb.id, 'Отметил')
     return
   }
@@ -221,14 +221,14 @@ async function handleCallback(cb, env, nowIso) {
   if (action === 'del') {
     await db.updateTask(env.DB, taskId, { status: 'cancelled' })
     await tg.editMessageText(env, chatId, cb.message.message_id,
-      `<s>${task.title}</s>\n\n🗑 Удалено.`, { reply_markup: { inline_keyboard: [] } })
+      `<s>${esc(task.title)}</s>\n\n🗑 Удалено.`, { reply_markup: { inline_keyboard: [] } })
     await tg.answerCallback(env, cb.id, 'Удалил')
     return
   }
 
   if (action === 'snooze') {
     await tg.editMessageText(env, chatId, cb.message.message_id,
-      `📌 <b>${task.title}</b>\n\nНа когда перенести?`,
+      `📌 <b>${esc(task.title)}</b>\n\nНа когда перенести?`,
       { reply_markup: snoozeKeyboard(taskId) })
     await tg.answerCallback(env, cb.id)
     return
@@ -264,6 +264,10 @@ async function handleCallback(cb, env, nowIso) {
 
   if (action === 'as') {
     const role = args[1]
+    if (!ASSIGNEE_LABEL[role]) {
+      await tg.answerCallback(env, cb.id, 'Не знаю такого исполнителя')
+      return
+    }
     await db.updateTask(env.DB, taskId, { assignee: role })
     const card = taskCard({ ...task, assignee: role }, { tz: chat.tz, nowIso })
     await tg.editMessageText(env, chatId, cb.message.message_id, card.text,
@@ -276,7 +280,7 @@ async function handleCallback(cb, env, nowIso) {
     const mode = args[1]
     if (mode === 'none') {
       await tg.editMessageText(env, chatId, cb.message.message_id,
-        `📌 <b>${task.title}</b>\n🗓 без срока`, { reply_markup: taskKeyboard(taskId) })
+        `📌 <b>${esc(task.title)}</b>\n🗓 без срока`, { reply_markup: taskKeyboard(taskId) })
       await tg.answerCallback(env, cb.id, 'Оставил без срока')
       return
     }
