@@ -1,5 +1,9 @@
 # 🗓 Планер — Telegram-бот, который понимает человеческий язык
 
+[![tests](https://github.com/escapist001/tg-planner/actions/workflows/test.yml/badge.svg)](https://github.com/escapist001/tg-planner/actions/workflows/test.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![cost](https://img.shields.io/badge/стоимость-0%20%E2%82%BD%2F%D0%BC%D0%B5%D1%81-brightgreen)](#стоимость)
+
 Бот для общего чата: пишешь ему «завтра в 15 к врачу» или «каждый вторник вынести мусор» — он
 запоминает, напоминает в срок и ведёт расписание на день и неделю. Работает на бесплатных
 тарифах Cloudflare: **0 ₽ в месяц**, без привязки карты.
