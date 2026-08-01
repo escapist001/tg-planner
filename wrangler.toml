@@ -1,0 +1,21 @@
+name = "tg-planner"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+DEFAULT_TZ = "Europe/Moscow"
+DEFAULT_DIGEST_TIME = "10:00"
+DEFAULT_REMIND_BEFORE_MIN = "30"
+AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AI_ENABLED = "true"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tg-planner"
+database_id = "PLACEHOLDER_FILL_ON_DEPLOY"
+
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["* * * * *"]
