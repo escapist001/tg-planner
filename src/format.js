@@ -1,7 +1,7 @@
 import { formatTime, formatDateHuman, localDateKey } from './time.js'
 
 export const ASSIGNEE_LABEL = { danya: 'Даня', zhenya: 'Женя', both: 'Оба' }
-const ASSIGNEE_ICON = { danya: '👤', zhenya: '👩', both: '👫' }
+const ASSIGNEE_ICON = { danya: '🐊', zhenya: '🐱', both: '👫' }
 const WEEKDAY_ACC = ['воскресенье', 'понедельник', 'вторник', 'среду',
   'четверг', 'пятницу', 'субботу']
 
