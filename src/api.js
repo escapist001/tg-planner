@@ -31,6 +31,22 @@ export async function handleApi(request, env, nowIso) {
   const url = new URL(request.url)
   const parts = url.pathname.split('/').filter(Boolean) // ['api', 'tasks', ...]
 
+  // Диагностика: дёрнуть фичу и увидеть настоящую ошибку, а не молчание в чате.
+  if (parts[1] === 'debug' && request.method === 'POST') {
+    const body = await request.json().catch(() => ({}))
+    const chatId = resolveChatId(env, body.chat_id)
+    if (!chatId) return json({ ok: false, error: 'чат не разрешён' }, 403)
+    try {
+      const features = await import('./features/index.js')
+      const fn = features[body.module]?.[body.fn]
+      if (typeof fn !== 'function') return json({ ok: false, error: 'нет такой функции' }, 400)
+      const result = await fn(env, chatId, nowIso, ...(body.args ?? []))
+      return json({ ok: true, result: result ?? null })
+    } catch (e) {
+      return json({ ok: false, error: e.message, stack: String(e.stack).split('\n').slice(0, 4) }, 500)
+    }
+  }
+
   if (parts[1] !== 'tasks') return json({ ok: false, error: 'not found' }, 404)
 
   if (parts.length === 2 && request.method === 'POST') {

@@ -36,9 +36,12 @@ export function taskKeyboard(taskId) {
       { text: '⏰ Перенести', callback_data: `snooze:${taskId}` },
       { text: '🗑', callback_data: `del:${taskId}` },
     ], [
-      { text: '👤 Даня', callback_data: `as:${taskId}:danya` },
-      { text: '👩 Женя', callback_data: `as:${taskId}:zhenya` },
+      { text: '🐊 Даня', callback_data: `as:${taskId}:danya` },
+      { text: '🐈‍⬛ Женя', callback_data: `as:${taskId}:zhenya` },
       { text: '👫 Оба', callback_data: `as:${taskId}:both` },
+    ], [
+      { text: '🤝 Подхватишь?', callback_data: `hf:ask:${taskId}` },
+      { text: '✂️ Разбить', callback_data: `zb:split:${taskId}` },
     ]],
   }
 }

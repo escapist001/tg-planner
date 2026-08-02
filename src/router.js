@@ -1,5 +1,8 @@
 import * as db from './db.js'
 import * as tg from './telegram.js'
+import * as features from './features/index.js'
+import * as zombie from './features/zombie.js'
+import * as wedding from './features/wedding.js'
 import { addTaskFromText, completeTask } from './tasks.js'
 import {
   taskCard, dayList, weekList, snoozeKeyboard, taskKeyboard, ASSIGNEE_LABEL, plural, esc,
@@ -45,11 +48,20 @@ function addressedText(msg, env) {
   if (!text) return null
   if (text.startsWith('/')) return null
 
-  const mention = new RegExp(`@${env.BOT_USERNAME}(?![0-9A-Za-z_])`, 'i')
-  if (mention.test(text)) return text.replace(mention, ' ').trim()
+  // trim обязателен: значение приходит из секрета, куда легко затесался перевод строки,
+  // а с ним шаблон «@имя\n» не совпадает ни с чем и бот молча игнорирует обращения.
+  const username = String(env.BOT_USERNAME ?? '').trim()
+  if (username) {
+    const mention = new RegExp(`@${username}(?![0-9A-Za-z_])`, 'i')
+    if (mention.test(text)) return text.replace(mention, ' ').trim()
+  }
 
   if (msg.reply_to_message?.from?.is_bot) return text
   if (msg.chat.type === 'private') return text
+
+  // Чат заведён только под дела: тогда обращаться к боту каждый раз незачем.
+  // Требует отключённого privacy mode у @BotFather, иначе Telegram просто не пришлёт сообщение.
+  if (String(env.LISTEN_ALL ?? '').trim() === 'true') return text
 
   return null
 }
@@ -63,6 +75,12 @@ const COMMANDS = {
   'мои': 'mine', 'mine': 'mine',
   'все': 'all', 'всё': 'all', 'all': 'all',
   'настройки': 'settings', 'settings': 'settings',
+  'wedding': 'wedding', 'свадьба': 'wedding',
+  'checkup': 'checkup', 'прогон': 'checkup',
+  'timeline': 'timeline', 'таймлайн': 'timeline',
+  'balance': 'balance', 'весы': 'balance',
+  'pets': 'pets', 'питомцы': 'pets',
+  'review': 'review', 'итоги': 'review',
 }
 
 function parseCommand(text) {
@@ -95,6 +113,14 @@ async function handleMessage(msg, env, nowIso) {
 }
 
 async function createFromText(text, msg, chat, role, env, nowIso) {
+  // Сначала пробуем разобрать сообщение как пачку дел или как рекламную интеграцию.
+  // Если получилось — бот покажет черновик с кнопками, и одиночное дело заводить незачем.
+  try {
+    if (await features.handleFeatureText(text, env, nowIso, { chat, role })) return
+  } catch (e) {
+    console.error('разбор пачки не удался, заводим как одно дело', e.message)
+  }
+
   const { task } = await addTaskFromText(env, {
     chatId: chat.chat_id, text, authorRole: role, authorId: msg.from.id, nowIso,
   })
@@ -169,6 +195,45 @@ async function runCommand({ cmd, rest }, msg, chat, role, env, nowIso) {
     return
   }
 
+  if (cmd === 'wedding') {
+    await features.wedding.refreshWeddingBoard(env, chatId, nowIso)
+    return
+  }
+
+  if (cmd === 'checkup') {
+    const res = await features.wedding.startCheckup(env, chatId, nowIso)
+    if (!res.started) {
+      await tg.sendMessage(env, chatId, 'Свадебных дел в списке пока нет — прогонять нечего.')
+    }
+    return
+  }
+
+  if (cmd === 'timeline') {
+    await tg.sendMessage(env, chatId, await features.wedding.renderTimeline(env, chatId, nowIso))
+    return
+  }
+
+  if (cmd === 'balance') {
+    const { text, reply_markup } = await features.teamwork.weeklyBalance(env, chatId, nowIso)
+    await tg.sendMessage(env, chatId, text, { reply_markup })
+    return
+  }
+
+  if (cmd === 'pets') {
+    await tg.sendMessage(env, chatId, await features.pets.petsOverview(env, chatId, nowIso, tz))
+    return
+  }
+
+  if (cmd === 'review') {
+    const review = await features.rituals.dayReview(env, chatId, nowIso)
+    if (!review) {
+      await tg.sendMessage(env, chatId, 'На сегодня дел не было — и разбирать нечего.')
+      return
+    }
+    await tg.sendMessage(env, chatId, review.text, review.reply_markup ? { reply_markup: review.reply_markup } : {})
+    return
+  }
+
   if (cmd === 'settings') {
     const text = '⚙️ <b>Настройки</b>\n\n'
       + `Часовой пояс: ${chat.tz}\n`
@@ -197,6 +262,11 @@ async function handleCallback(cb, env, nowIso) {
   const chatId = cb.message.chat.id
   const chat = await db.getChat(env.DB, chatId, chatDefaults(env))
   const [action, ...args] = cb.data.split(':')
+
+  if (features.isFeatureCallback(cb.data)) {
+    const role = (await db.getUserRole(env.DB, chatId, cb.from.id)) ?? roleFromName(cb.from)
+    if (await features.handleFeatureCallback(cb, env, nowIso, { chat, role })) return
+  }
 
   if (action === 'set') return handleSettings(cb, chat, args, env, nowIso)
 
@@ -228,8 +298,8 @@ async function handleCallback(cb, env, nowIso) {
 
   if (action === 'snooze') {
     await tg.editMessageText(env, chatId, cb.message.message_id,
-      `📌 <b>${esc(task.title)}</b>\n\nНа когда перенести?`,
-      { reply_markup: snoozeKeyboard(taskId) })
+      `📌 <b>${esc(task.title)}</b>\n\n${zombie.snoozePrompt(task)}`,
+      { reply_markup: zombie.snoozeKeyboardFor(task) })
     await tg.answerCallback(env, cb.id)
     return
   }
@@ -259,6 +329,14 @@ async function handleCallback(cb, env, nowIso) {
     await tg.editMessageText(env, chatId, cb.message.message_id, card.text,
       { reply_markup: card.reply_markup })
     await tg.answerCallback(env, cb.id, `Перенёс на ${formatTime(due, chat.tz)}`)
+
+    // Дело, которое переезжает пятый раз, заслуживает отдельного разговора.
+    // maybeIntervene сам считает переносы и при необходимости пишет в чат.
+    try {
+      await zombie.maybeIntervene(env, { ...task, due_at: due }, { tz: chat.tz, nowIso })
+    } catch (e) {
+      console.error('интервенция не сработала', e.message)
+    }
     return
   }
 
