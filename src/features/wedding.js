@@ -115,6 +115,11 @@ export async function refreshWeddingBoard(env, chatId, nowIso) {
       await tg.editMessageText(env, chatId, pinnedId, text, { reply_markup: markup })
       return { messageId: pinnedId, created: false, text }
     } catch (e) {
+      // «Сообщение не изменилось» — штатный ответ Telegram, когда за сутки ничего не поменялось.
+      // Слать из-за него новый штаб означает засорять чат копиями.
+      if (/not modified/i.test(e.message)) {
+        return { messageId: pinnedId, created: false, text, unchanged: true }
+      }
       console.error('штаб не обновился, шлём заново', e.message)
     }
   }

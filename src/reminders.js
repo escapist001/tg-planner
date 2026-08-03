@@ -131,9 +131,10 @@ async function runRituals(env, chat, nowIso, isQuiet) {
     fired += 2
   }
 
-  // Штаб свадьбы обновляем раз в час, чтобы отсчёт не устаревал.
-  const { minute } = localParts(nowIso, tz)
-  if (minute === 0) {
+  // Штаб свадьбы трогаем раз в сутки, вместе с дайджестом. Ежечасное обновление
+  // засоряет чат ради одной изменившейся цифры.
+  const { hour, minute } = localParts(nowIso, tz)
+  if (hour === 12 && minute < 5) {
     try {
       await wedding.refreshWeddingBoard(env, chatId, nowIso)
     } catch (e) {
